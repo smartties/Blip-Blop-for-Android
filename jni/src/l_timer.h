@@ -1,0 +1,3 @@
+
+void LInitTimer();
+DWORD LGetTime();

@@ -1,0 +1,36 @@
+---------------------------------------------------------------
+Blip'n Blop 3 - (c) LOADED - Nov  1 2001
+---------------------------------------------------------------
+0 joystick(s) found
+Using data\bb3.cfg as configuration file.
+Using data\bb3.scr as hiscores file
+Set 640x480x16 refresh rate to 85
+Available video memory : 31752 Ko
+Memory manager decided to use VIDEO memory.
+Creating video buffer of size 840...Ok
+Successfully loaded interface.
+Available video memory : 26931 Ko
+---------------------------------------------------------------
+Loading global game files...
+---------------------------------------------------------------
+Successfully loaded <blip.gfx>
+Successfully loaded <blop.gfx>
+Successfully loaded <bb.gfx>
+Successfully loaded <misc.gfx>
+Successfully loaded <rpg_bb.gfx>
+Successfully loaded <scorei.lft>
+Successfully loaded <scoreo.lft>
+Successfully loaded <ammo1.lft>
+Successfully loaded <ammo2.lft>
+Successfully loaded <cool.lft>
+Successfully loaded <rpg.lft>
+Successfully loaded <misc.sfx>
+Successfully loaded <bb.sfx>
+Successfully loaded <bb3.lst>
+Successfully loaded all needed global game files
+---------------------------------------------------------------
+Releasing Blip'n Blop 3
+---------------------------------------------------------------
+Restored refresh rate to 85
+Saving data\bb3.scr as hi-scores file.
+Saving data\bb3.cfg as configuration file.
