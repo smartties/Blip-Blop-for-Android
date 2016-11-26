@@ -2883,13 +2883,11 @@ void Game::updateTouch()
 
 
 
-    if( (box_manager.get_state("shoot") == TOUCH_DOWN || box_manager.get_state("shoot") == TOUCH_PRESSING) ||
-        (box_manager.get_state("jump")  == TOUCH_DOWN && box_manager.isinside_w("shoot")) )
+    if( (box_manager.get_state("shoot") == TOUCH_DOWN || box_manager.get_state("shoot") == TOUCH_PRESSING) )
     {
         in.tirer = true;
     }
-    if( (box_manager.get_state("jump")  == TOUCH_DOWN || box_manager.get_state("jump") == TOUCH_PRESSING) ||
-        (in.tirer && box_manager.isinside_w("jump")) )
+    if( (box_manager.get_state("jump")  == TOUCH_DOWN || box_manager.get_state("jump") == TOUCH_PRESSING) )
     {
         in.sauter = true;
     }
