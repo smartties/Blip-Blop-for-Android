@@ -1,2 +1,2 @@
 Here you have to put the folder "data/" which contains all the texture/sounds/data ...
-You can this folder on the Original PC game : https://github.com/benkaraban/blip-blop
+You can find this folder on the original PC port : https://github.com/benkaraban/blip-blop
