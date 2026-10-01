@@ -77,6 +77,7 @@ public:
 	// Renvoie la longueur en pixels d'un texte donné
 	//
 	int width(const char * txt);
+	int height() const { return h; }
 
 
 	// What's the fuck up ?

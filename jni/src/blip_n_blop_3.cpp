@@ -5,12 +5,15 @@ HWND	WinHandle=NULL;
 
 
 
-void Java_org_libsdl_app_SDLActivity_nativeStop(JNIEnv* env)
+// Called from Input::update() on SDL_APP_WILLENTERBACKGROUND / DIDENTERFOREGROUND.
+// (Replaces the old SDLActivity.nativeStop()/nativeRestart() JNI hooks, which ran
+// on the Java UI thread and raced with the game thread.)
+void app_pause()
 {
     game.Pause();
 }
 
-void Java_org_libsdl_app_SDLActivity_nativeRestart(JNIEnv* env)
+void app_resume()
 {
     game.Resume();
 }
@@ -188,6 +191,7 @@ bool InitApp(HINSTANCE hInstance, int nCmdShow)
 
 
 	load_BB3_config(CONFIG_FILE);
+	load_lives_setting();
 
 	//------------------------------------------------------------------
 	//			Charge les hi scores
@@ -374,6 +378,15 @@ bool InitApp(HINSTANCE hInstance, int nCmdShow)
 		debug << "Ok\n";
 		vbuffer_wide = WANTED_VBUFFER_WIDE;
 	}
+
+	// The screen-sized buffers stand for DirectDraw surfaces, which have no
+	// alpha: copying from them must be a plain copy. With SDL's default
+	// alpha blending, a copy of a surface onto itself (the screen shake,
+	// the underwater ripple) goes through the blending code, which is not
+	// safe for overlapping copies and smears the picture.
+	SDL::Surface * opaque[] = { primSurface, backSurface, systemSurface, videoA };
+	for (int i = 0; i < 4; i++)
+		SDL_SetSurfaceBlendMode(opaque[i]->Get(), SDL_BLENDMODE_NONE);
 
 	LOGI("eighth");
 

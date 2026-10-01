@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2014 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -20,7 +20,6 @@
 */
 #include "../../SDL_internal.h"
 
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -32,8 +31,9 @@ extern int SDL_InitBeApp(void);
 /* Quit the Be Application, if there's nothing left to do */
 extern void SDL_QuitBeApp(void);
 
-/* Flag to tell whether the app is active or not */
-extern int SDL_BeAppActive;
+/* Be Application Signature*/
+extern const char *SDL_signature;
+
 /* vi: set ts=4 sw=4 expandtab: */
 
 #ifdef __cplusplus

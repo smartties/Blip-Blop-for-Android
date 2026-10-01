@@ -188,6 +188,9 @@ void update_tir(int &x, int &y, int xd, int yd, float angle);
 #define TOUCH_DOWN     2
 #define TOUCH_UP       3
 
+// Android pointer ids tracked at once (stick + fire + jump + one spare...).
+#define MAX_FINGERS    5
+
 class Finger
 {
     public :
@@ -196,25 +199,116 @@ class Finger
         state = TOUCH_NOTHING;
         x = 0;
         y = 0;
+        ptr = NULL;
+        fresh = false;
     }
 
     int state;
+    // Went down since the last Touch_manager::refresh(). A tap shorter than
+    // a frame is only ever seen as TOUCH_UP; boxes accept such a finger only
+    // when it is fresh, not one that slid onto them from elsewhere.
+    bool fresh;
 
     float x;
     float y;
     void *ptr;
 };
+// Gamepad / TV remote / keyboard actions (see Input::update).
+enum PadAction {
+    ACT_LEFT = 0, ACT_RIGHT, ACT_UP, ACT_DOWN,
+    ACT_FIRE, ACT_JUMP, ACT_SUPER, ACT_PAUSE,
+    NB_ACT
+};
+enum PadNav {
+    NAV_UP = 0, NAV_DOWN, NAV_LEFT, NAV_RIGHT, NAV_OK, NAV_BACK,
+    NB_NAV
+};
+#define NB_PAD_PLAYERS 2
+
 class Touch_manager
 {
     public :
 
+    Touch_manager()
+    {
+        pad_tap = false;
+        nb_taps = 0;
+        clear_pad_edges();
+    }
+
+    // Finger-down positions not yet looked at by the game. A tap shorter than
+    // a frame goes DOWN and UP before the touch buttons are checked, so the
+    // level (Game::updateTouch) reads these to not lose it.
+    enum { MAX_TAPS = 4, TAP_MAX_AGE = 250 /* ms */ };
+    struct Tap { float x, y; Uint32 t; };
+    Tap tap[MAX_TAPS];
+    int nb_taps;
+
+    void add_tap(float x, float y)
+    {
+        if(nb_taps < MAX_TAPS)
+        {
+            tap[nb_taps].x = x;
+            tap[nb_taps].y = y;
+            tap[nb_taps].t = SDL_GetTicks();
+            nb_taps++;
+        }
+    }
+    bool take_tap(float &x, float &y)
+    {
+        while(nb_taps > 0)
+        {
+            Tap tp = tap[0];
+            for(int i = 1; i < nb_taps; i++)
+            tap[i-1] = tap[i];
+            nb_taps--;
+            if(SDL_GetTicks() - tp.t <= TAP_MAX_AGE)
+            {
+                x = tp.x;
+                y = tp.y;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Edges (pressed since the last refresh()) coming from the remote,
+    // a gamepad or a keyboard. pad_tap makes the "touch the screen to
+    // continue" loops accept OK / A / START / BACK too.
+    bool pad_tap;
+    bool nav[NB_NAV];
+    bool act_pressed[NB_PAD_PLAYERS][NB_ACT];
+
+    void clear_pad_edges()
+    {
+        pad_tap = false;
+        for (int i = 0; i < NB_NAV; i++)
+            nav[i] = false;
+        for (int p = 0; p < NB_PAD_PLAYERS; p++)
+            for (int i = 0; i < NB_ACT; i++)
+                act_pressed[p][i] = false;
+    }
+
     bool set(int f_id, int state, float x, float y)
     {
-        if(f_id < 0 || f_id > 1)
+        if(f_id < 0 || f_id >= MAX_FINGERS)
         return false;
 
         finger[f_id].x = x;
         finger[f_id].y = y;
+
+        // A new press. Android reuses pointer id 0 once every finger is up,
+        // so a finger can go DOWN -> UP -> PRESSING (lift one button, touch
+        // another) between two frames. The owner of the lifted finger must
+        // not keep it: that button would stay held while the new one could
+        // never capture the finger (issue #2, "jump sticks to fire"). The
+        // box that lost its finger releases itself (Box::manage).
+        if(state == TOUCH_PRESSING &&
+           (finger[f_id].state == TOUCH_NOTHING || finger[f_id].state == TOUCH_UP))
+        {
+            finger[f_id].ptr = NULL;
+            finger[f_id].fresh = true;
+        }
 
         if(state == TOUCH_PRESSING && finger[f_id].state == TOUCH_DOWN)
         finger[f_id].state = TOUCH_DOWN;
@@ -222,10 +316,6 @@ class Touch_manager
         finger[f_id].state = TOUCH_UP;
         else
         finger[f_id].state = state;
-
-        if(finger[f_id].state == TOUCH_UP)
-        LOGI("UP");
-
 
         if(finger[f_id].state == TOUCH_NOTHING)
         finger[f_id].ptr = NULL;
@@ -237,8 +327,9 @@ class Touch_manager
     {
         int i;
 
-        for(i = 0; i < 2; i++)
+        for(i = 0; i < MAX_FINGERS; i++)
         {
+            finger[i].fresh = false;
             if(finger[i].state == TOUCH_PRESSING)
             finger[i].state = TOUCH_DOWN;
             if(finger[i].state == TOUCH_UP)
@@ -255,17 +346,20 @@ class Touch_manager
         tirer = false;
         sauter = false;
         ulti = false;
+        ulti2 = false;
+        clear_pad_edges();
     }
 
     void reset()
     {
         int i;
-        for(i = 0; i < 2; i++)
+        for(i = 0; i < MAX_FINGERS; i++)
         {
             finger[i].x = 0;
             finger[i].y = 0;
             finger[i].state = TOUCH_NOTHING;
             finger[i].ptr = NULL;
+            finger[i].fresh = false;
         }
 
         gauche = false;
@@ -275,15 +369,17 @@ class Touch_manager
         tirer = false;
         sauter = false;
         ulti = false;
+        ulti2 = false;
         angle = 0;
         dist = 0;
+        clear_pad_edges();
     }
 
     int search_up()
     {
         int i;
 
-        for(i = 0; i < 2; i++)
+        for(i = 0; i < MAX_FINGERS; i++)
         {
             if(finger[i].state == TOUCH_UP)
             return i;
@@ -293,13 +389,13 @@ class Touch_manager
     }
     bool so_up()
     {
-        return search_up() >= 0;
+        return search_up() >= 0 || pad_tap;
     }
     int search_down()
     {
         int i;
 
-        for(i = 0; i < 2; i++)
+        for(i = 0; i < MAX_FINGERS; i++)
         {
             if(finger[i].state == TOUCH_PRESSING || finger[i].state == TOUCH_DOWN)
             return i;
@@ -309,14 +405,14 @@ class Touch_manager
     }
     bool so_down()
     {
-        return search_down() >= 0;
+        return search_down() >= 0 || pad_tap;
     }
 
     int search_ptr(void *ptr)
     {
         int i;
 
-        for(i = 0; i < 2; i++)
+        for(i = 0; i < MAX_FINGERS; i++)
         {
             if(finger[i].ptr == ptr)
             return i;
@@ -329,7 +425,7 @@ class Touch_manager
     {
         int i;
 
-        for(i = 0; i < 2; i++)
+        for(i = 0; i < MAX_FINGERS; i++)
         {
             if(finger[i].state == TOUCH_PRESSING)
             return i;
@@ -339,13 +435,13 @@ class Touch_manager
     }
     bool so_pressing()
     {
-        return search_pressing() >= 0;
+        return search_pressing() >= 0 || pad_tap;
     }
     bool nothing()
     {
         int i;
 
-        for(i = 0; i < 2; i++)
+        for(i = 0; i < MAX_FINGERS; i++)
         {
             if(finger[i].state != TOUCH_NOTHING)
             return false;
@@ -354,7 +450,7 @@ class Touch_manager
         return true;
     }
 
-    Finger finger[2];
+    Finger finger[MAX_FINGERS];
     bool gauche;
     bool haut;
     bool droit;
@@ -362,6 +458,7 @@ class Touch_manager
     bool tirer;
     bool sauter;
     bool ulti;
+    bool ulti2;		// player 2 cow bomb, this update (Game::updateTouch)
 
     bool padded;
     double pad_x;
@@ -372,13 +469,48 @@ class Touch_manager
 
 
 
+// Android lifecycle hooks (blip_n_blop_3.cpp)
+void app_pause();
+void app_resume();
+
 class Input : public Touch_manager
 {
 private:
 	int				n_joy;
 	DIJOYSTATE		js[MAX_JOY];
+
+	// Game controllers (Shield controller, Xbox / PlayStation pads...).
+	// Slot 0 drives player 1, slot 1 drives player 2 in a two-player game.
+	struct PadSlot {
+		SDL_GameController *	gc;
+		SDL_JoystickID			id;
+		int						stick_dir;	// last left-stick direction, for menu edges
+		// Triggers (0 = right / fire, 1 = left / cow bomb): rest position
+		// (see Input::triggerHeld) and whether the trigger is past the
+		// threshold.
+		int						trig_rest[2];
+		bool					trig_on[2];
+	};
+	PadSlot			pads[NB_PAD_PLAYERS];
+	bool			compactPads();
+	bool			act_held[NB_PAD_PLAYERS][NB_ACT];
+	bool			pad_any_held;		// a controller button / stick is held
+	int				super_pending[NB_PAD_PLAYERS];
+	bool			pause_pending;
+	bool			disconnect_pending;	// a controller went away
+	bool			two_players;
+	float			aim[NB_PAD_PLAYERS];
+	int				last_hdir[NB_PAD_PLAYERS];
+
+	void	padAdded(int device_index);
+	void	padRemoved(SDL_JoystickID id);
+	int		padSlot(SDL_JoystickID id) const;
+	void	pressAction(int player, int act);
+	void	pressNav(int nav);
+	void	updateHeld();
+	bool	triggerHeld(int slot, int t, int value);
 	char 			buffer[256];
-	char			specialsbuffer[0xFFF];
+	char			specialsbuffer[0x1000];
 	unsigned int	aliastab[256];
 
 public:
@@ -389,7 +521,8 @@ public:
 
 	inline int scanAlias(int a) const
 	{
-		return (scanKey(aliastab[a]));
+		// 0 = SDLK_UNKNOWN: an unset alias is never "held".
+		return aliastab[a] != 0 && scanKey(aliastab[a]);
 	};
 	inline unsigned int getAlias(int n) const
 	{
@@ -410,6 +543,19 @@ public:
 	void	close();
 	bool	anyKeyPressed();
 	bool	reAcquire();
+
+	// --- Gamepad / TV remote ---------------------------------------------
+	// player: 0 = player 1, 1 = player 2. In a one-player game every
+	// controller (and the remote / keyboard) drives player 1.
+	bool	padHeld(int player, int act) const;		// held, or tapped this frame
+	bool	takeSuper(int player);					// one cow bomb request per press
+	bool	takePause();							// START / BACK in game
+	bool	takeDisconnect();						// a controller was unplugged / went to sleep
+	float	padAim(int player) const { return aim[player]; }
+	bool	padHasDir(int player) const;
+	int		nbPads() const;
+	void	setTwoPlayers(bool on);
+	void	clearPadInput(bool keep_disconnect = false);
 };
 
 //-----------------------------------------------------------------------------

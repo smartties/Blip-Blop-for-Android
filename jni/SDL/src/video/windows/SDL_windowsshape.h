@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2014 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -21,20 +21,21 @@
 
 #include "../../SDL_internal.h"
 
-#ifndef _SDL_windowsshape_h
-#define _SDL_windowsshape_h
+#ifndef SDL_windowsshape_h_
+#define SDL_windowsshape_h_
 
 #include "SDL_video.h"
 #include "SDL_shape.h"
 #include "../SDL_sysvideo.h"
 #include "../SDL_shape_internals.h"
 
-typedef struct {
+typedef struct
+{
     SDL_ShapeTree *mask_tree;
 } SDL_ShapeData;
 
-extern SDL_WindowShaper* Win32_CreateShaper(SDL_Window * window);
-extern int Win32_SetWindowShape(SDL_WindowShaper *shaper,SDL_Surface *shape,SDL_WindowShapeMode *shape_mode);
+extern SDL_WindowShaper *Win32_CreateShaper(SDL_Window *window);
+extern int Win32_SetWindowShape(SDL_WindowShaper *shaper, SDL_Surface *shape, SDL_WindowShapeMode *shape_mode);
 extern int Win32_ResizeWindowShape(SDL_Window *window);
 
-#endif /* _SDL_windowsshape_h */
+#endif /* SDL_windowsshape_h_ */

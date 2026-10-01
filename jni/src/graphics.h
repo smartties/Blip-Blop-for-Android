@@ -10,7 +10,7 @@
 #endif
 
 ///MODIF SDL
-#include "../SDL/include/SDL.h"
+#include "SDL.h"
 
 
 #include "ben_debug.h"

@@ -98,6 +98,7 @@ Debug & Debug::operator << (const char * msg)
 {
 	/*Msg(msg);
 	return *this;*/
+	return *this;
 }
 
 
@@ -112,6 +113,7 @@ Debug & Debug::operator << (int nb)
 
 	_itoa(nb, r, 10);				// Base 10 pour les nombres quelconques
 	Msg(r);	return *this;*/
+	return *this;
 }
 
 
@@ -129,4 +131,5 @@ Debug & Debug::operator << (void * ptr)
 	_itoa(int(long(ptr)), r, 16);			// Base 16 pour les adresses
 	Msg(r);
 	return *this;*/
+	return *this;
 }

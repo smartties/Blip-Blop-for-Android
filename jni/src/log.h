@@ -14,7 +14,7 @@
 #define LOGI(x...)  __android_log_print(ANDROID_LOG_INFO,"NativeWOpenGL",x)
 #endif
 
-#include "../SDL/include/SDL.h"
+#include "SDL.h"
 #include <stdio.h>
 #include <string.h>
 

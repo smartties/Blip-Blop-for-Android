@@ -113,12 +113,21 @@ void Picture::LoadPNG(char * file)
     {
         int ww = 0, hh = 0, tt = 3;
 
-        stbi_uc *ptr_stbi = stbi_png_load_from_memory((const stbi_uc*)parseur.buffer, parseur.length-1, &ww, &hh, &tt, 0);
+        stbi_uc *ptr_stbi = stbi_png_load_from_memory((const stbi_uc*)parseur.buffer, (int)parseur.length, &ww, &hh, &tt, 0);
+
+        if(ptr_stbi == NULL)
+        {
+            LOGI("LoadPNG: cannot decode %s", file);
+            parseur.close();
+            return;
+        }
+
         unsigned char *data;
-        int i, j, k, l = hh-1;
+        int i, j, k, l;
 
         surf = CreateSDLSurface(ww, hh, tt*8);
         data = (unsigned char *)surf->Get()->pixels;
+        int pitch = surf->Get()->pitch;   // rows are padded to 4 bytes
         FindSize();
 	    xspot = 0;
 	    yspot = 0;
@@ -131,13 +140,13 @@ void Picture::LoadPNG(char * file)
             {
                 for(k = 0; k < tt; k++)
                 {
-                    data[ ((l*ww)+j)*tt+k ] = ptr_stbi[ ((i*ww)+j)*tt+k ];
+                    data[ l*pitch + j*tt + k ] = ptr_stbi[ ((i*ww)+j)*tt+k ];
                 }
             }
             l++;
             //l--;
         }
-        delete[] ptr_stbi;
+        stbi_image_free(ptr_stbi);
         parseur.close();
     }
 }
@@ -211,6 +220,11 @@ void Picture::LoadBMP(char * file, int xs, int ys, int flags)
 
 void Picture::BlitTo(SDL::Surface * s, int x, int y) const
 {
+	// Pictures whose file is missing (e.g. the Android touch-control PNGs)
+	// have no surface: draw nothing instead of crashing.
+	if (surf == NULL || surf->Get() == NULL)
+		return;
+
 	x -= xspot;
 	y -= yspot;
 
@@ -254,6 +268,11 @@ void Picture::BlitTo(SDL::Surface * s, int x, int y) const
 
 void Picture::PasteTo(SDL::Surface * s, int x, int y) const
 {
+	// Pictures whose file is missing (e.g. the Android touch-control PNGs)
+	// have no surface: draw nothing instead of crashing.
+	if (surf == NULL || surf->Get() == NULL)
+		return;
+
 	x -= xspot;
 	y -= yspot;
 

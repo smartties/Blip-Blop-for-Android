@@ -14,14 +14,9 @@ using namespace std;
 #include "log.h"
 
 
-extern JNIEnv *senv;
 extern AAssetManager *smgr;
 
 AAssetManager *get_asset_manager();
-
-static SDLCALL long long int aa_rw_seek(struct SDL_RWops * ops, long long int offset, int whence);
-static SDLCALL size_t aa_rw_read(struct SDL_RWops * ops, void *ptr, size_t size, size_t maxnum);
-static SDLCALL int aa_rw_close(struct SDL_RWops * ops);
 
 AAsset *AAsset_asset(const char *filename);
 SDL_RWops * AAsset_RWFromAsset(const char *filename);
@@ -73,13 +68,16 @@ class Parseur
     {
         if(file != NULL && pos+size <= length)
         {
-            memcpy ( buf, buffer+pos, size );
+            memcpy ( buf, (const char *)buffer+pos, size );
             pos += size;
         }
     }
     void close()
     {
-        AAsset_close(file);
+        if(file != NULL)
+            AAsset_close(file);
+        file = NULL;
+        buffer = NULL;
     }
 
     AAsset *file;

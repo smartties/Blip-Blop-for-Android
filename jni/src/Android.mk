@@ -1,54 +1,29 @@
 LOCAL_PATH := $(call my-dir)
 
-
-#include $(CLEAR_VARS)
-
-#LOCAL_MODULE            := fmodex
-#LOCAL_SRC_FILES         := fmod/$(TARGET_ARCH_ABI)/libfmodex.so
-#LOCAL_EXPORT_C_INCLUDES := fmod//inc
-
-#include $(PREBUILT_SHARED_LIBRARY)
-
-
-
 include $(CLEAR_VARS)
 
 LOCAL_MODULE := main
 
-SDL_PATH := ../SDL
-LOCAL_SRC_FILES += ../SDL/src/main/android/SDL_android_main.c 
+LOCAL_C_INCLUDES := \
+	$(LOCAL_PATH) \
+	$(LOCAL_PATH)/../SDL/include \
+	$(LOCAL_PATH)/../SDL_mixer/include
 
-LOCAL_C_INCLUDES := $(LOCAL_PATH)/$(SDL_PATH)/include
+LOCAL_SRC_FILES := \
+	$(subst $(LOCAL_PATH)/,, $(wildcard $(LOCAL_PATH)/*.cpp)) \
+	Engine/ddraw.cpp \
+	Engine/dinput.cpp \
+	Engine/io.cpp \
+	Engine/windows.cpp
 
+# 2001-era C++ code: keep it on C++14 and tolerate the old idioms it relies on.
+LOCAL_CPPFLAGS := -std=gnu++14 -fpermissive -Wno-register -Wno-c++11-narrowing \
+	-Wno-write-strings -Wno-deprecated-declarations
+# Several Win32/FMOD stubs have no return statement; do not let clang turn
+# "falling off the end" into a trap or into undefined control flow.
+LOCAL_CPPFLAGS += -fno-strict-return
 
-LOCAL_CPP_INCLUDES += \
-	$(subst $(LOCAL_PATH)/,, \
-	$(wildcard $(LOCAL_PATH)/*.h) )
-LOCAL_SRC_FILES += \
-	$(subst $(LOCAL_PATH)/,, \
-	$(wildcard $(LOCAL_PATH)/*.cpp) )
-	
-
-LOCAL_CPP_INCLUDES    += Engine/ddraw.h
-LOCAL_CPP_INCLUDES    += Engine/dinput.h
-LOCAL_CPP_INCLUDES    += Engine/io.h
-LOCAL_CPP_INCLUDES    += Engine/windows.h
-
-LOCAL_SRC_FILES    += Engine/ddraw.cpp
-LOCAL_SRC_FILES    += Engine/dinput.cpp
-LOCAL_SRC_FILES    += Engine/io.cpp
-LOCAL_SRC_FILES    += Engine/windows.cpp
-
-#LOCAL_SRC_FILES += main.cpp
-#LOCAL_SRC_FILES += caller.cpp
-#LOCAL_CPP_INCLUDES += main.h
-#LOCAL_CPP_INCLUDES += caller.h
-
-	
-
-LOCAL_SHARED_LIBRARIES := SDL2
-LOCAL_SHARED_LIBRARIES += SDL2_mixer
-#LOCAL_SHARED_LIBRARIES += fmodex
+LOCAL_SHARED_LIBRARIES := SDL2 SDL2_mixer
 
 LOCAL_LDLIBS := -lGLESv1_CM -lGLESv2 -llog -landroid
 

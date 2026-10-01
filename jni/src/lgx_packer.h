@@ -80,8 +80,8 @@ struct LGX_HEADER {
 class LGXpacker
 {
 private:
-	unsigned long *	tab_0;
-	unsigned long *	tab_1;
+	Uint32 *	tab_0;
+	Uint32 *	tab_1;
 	unsigned short *	half_tone;
 
 	int		rDecal;	// Décalages des masques par rapport au bit de droite

@@ -43,14 +43,49 @@ HiScores	hi_scores;
 bool	winSet;
 
 
+int		start_lives = LIVES_DEFAULT;
+
+#define LIVES_FILE	"lives.cfg"
+
+void load_lives_setting()
+{
+	FILE *	fic = fopen(create_pathSDL(LIVES_FILE), "r");
+	int		n;
+
+	if (fic == NULL)
+		return;
+
+	if (fscanf(fic, "%d", &n) == 1 && n >= LIVES_MIN && n <= LIVES_MAX)
+		start_lives = n;
+
+	fclose(fic);
+}
+
+void save_lives_setting()
+{
+	FILE *	fic = fopen(create_pathSDL(LIVES_FILE), "w");
+
+	if (fic == NULL) {
+		LOGI("Cannot save %s", LIVES_FILE);
+		return;
+	}
+
+	fprintf(fic, "%d\n", start_lives);
+	fclose(fic);
+}
+
 void load_BB3_config(const char * cfg_file)
 {
 	FILE *	fic;
 	int		a;
 
 	///MODIF PATH
+	// The config file is not read on Android: builds before this one saved
+	// it with every key alias at 0, and reading that back would break the
+	// keys again. The default keys are always used.
 	if(create_pathSDL(cfg_file))
 	LOGI("PATH : _%s_ ", create_pathSDL(cfg_file));
+	set_default_config(true);
 	return ;
 
 	fic = fopen(create_pathSDL(cfg_file), "rb");

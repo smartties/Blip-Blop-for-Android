@@ -69,9 +69,34 @@
 #define NB_TXT		10
 
 
+// fnt_rpg is the smallest font of the game: for smaller text, draw it once
+// into a buffer and blit that scaled down to 3/4.
+static void printSmallC(SDL::Surface * surf, int xc, int y, const char * txt, SDL::Surface * & cache)
+{
+	if (cache == NULL) {
+		int w = fnt_rpg.width(txt) + 4;
+		int h = fnt_rpg.height() * 2;
+
+		cache = CreateSDLSurface(w, h, 32);
+		SDL_FillRect(cache->Get(), NULL, 0);	// transparent
+		fnt_rpg.print(cache, 2, h / 4, txt);
+	}
+
+	SDL_Surface *	s = cache->Get();
+	SDL_Rect		dst;
+
+	dst.w = s->w * 3 / 4;
+	dst.h = s->h * 3 / 4;
+	dst.x = xc - dst.w / 2;
+	dst.y = y;
+	SDL_BlitScaled(s, NULL, surf->Get(), &dst);
+}
+
 MenuMain::MenuMain()
 {
 	redefine = -1;
+	editing_lives = false;
+	lives_edit = start_lives;
 
 	menu_txt = new char * [NB_TXT];
 
@@ -96,6 +121,7 @@ void MenuMain::start()
 	current_menu = MENU_MAIN;
 	nb_focus = 3;
 	focus = 0;
+	editing_lives = false;
 	updateName();
 
 	start_music_on = music_on;
@@ -107,21 +133,94 @@ int MenuMain::update()
 	in.update();
 
 	box_manager.manage(current_menu);
-	LOGI("MenuMain %d ", current_menu); ///UPDATE MenuMain /// a revoir (plusieurs return)
+	up = false;
 
 	//up = in.anyKeyPressed();
 
 	updateRedefine();
 	updateName();
 
-	bool retour = RET_CONTINUE;
+	int retour = RET_CONTINUE;
+
+	// Remote / gamepad / keyboard: UP/DOWN move the red focus, OK activates it,
+	// BACK leaves the sub-menu (or offers to quit from the main menu).
+	// The item names below are the touch boxes of each menu (game.cpp).
+	// OPTIONS (video / sound / keys of the PC game) is not available on
+	// Android, so it is not shown at all.
+	static const char * const items_main[]  = { "START", "LIVES", "EXIT" };
+	static const char * const items_start[] = { "RET_START_GAME1", "RET_START_GAME2", "RETOUR_START" };
+	static const char * const items_exit[]  = { "RET_EXIT", "RETOUR_EXIT" };
+
+	const char * const * items = NULL;
+	int nb_items = 0;
+	const char * back_item = NULL;
+
+	if (current_menu == MENU_MAIN)  { items = items_main;  nb_items = 3; back_item = "EXIT"; }
+
+	// LIVES being changed: LEFT / RIGHT change it by 1, UP / DOWN by 10,
+	// OK sets it, BACK leaves it as it was. On a touch screen, the left and
+	// right parts of the line lower / raise it and its middle sets it.
+	if (current_menu == MENU_MAIN && editing_lives) {
+		int step = 0;
+		if (in.nav[NAV_LEFT]  || box_manager.get_state("LIVES_MINUS") == TOUCH_UP) step = -1;
+		if (in.nav[NAV_RIGHT] || box_manager.get_state("LIVES_PLUS")  == TOUCH_UP) step = +1;
+		if (in.nav[NAV_DOWN]) step = -10;
+		if (in.nav[NAV_UP])   step = +10;
+
+		if (step != 0) {
+			up = true;
+			lives_edit += step;
+			if (lives_edit < LIVES_MIN) lives_edit = LIVES_MIN;
+			if (lives_edit > LIVES_MAX) lives_edit = LIVES_MAX;
+		}
+
+		if (in.nav[NAV_OK] || box_manager.get_state("LIVES") == TOUCH_UP) {
+			up = true;
+			start_lives = lives_edit;
+			save_lives_setting();
+			editing_lives = false;
+			LOGI("LIVES set to %d", start_lives);
+		} else if (in.nav[NAV_BACK]) {
+			up = true;
+			editing_lives = false;
+		}
+
+		updateName();
+		in.refresh();
+		return RET_CONTINUE;
+	}
+	if (current_menu == MENU_START) { items = items_start; nb_items = 3; back_item = "RETOUR_START"; }
+	if (current_menu == MENU_EXIT)  { items = items_exit;  nb_items = 2; back_item = "RETOUR_EXIT"; }
+
+	const char * pad_hit = NULL;
+
+	if (items != NULL && focus >= 0 && focus < nb_items) {
+		int step = 0;
+		if (in.nav[NAV_UP])   step = -1;
+		if (in.nav[NAV_DOWN]) step = +1;
+
+		if (step != 0) {
+			up = true;
+			focus = (focus + step + nb_items) % nb_items;
+		}
+
+		if (in.nav[NAV_OK]) {
+			up = true;
+			pad_hit = items[focus];
+		} else if (in.nav[NAV_BACK]) {
+			up = true;
+			pad_hit = back_item;
+		}
+	}
+
+#define HIT(name) (box_manager.get_state(name) == TOUCH_UP || (pad_hit != NULL && strcmp(pad_hit, name) == 0))
 
 	if(current_menu == MENU_MAIN)
 	{
 	    if(box_manager.get_state("START") == TOUCH_DOWN ||
            box_manager.get_state("START") == TOUCH_PRESSING)
 	    focus = 0;
-	    if(box_manager.get_state("START") == TOUCH_UP)
+	    if(HIT("START"))
 	    {
 	        LOGI("START");
 	        current_menu = MENU_START;
@@ -129,25 +228,29 @@ int MenuMain::update()
             focus = 0;
             updateName();
 	    }
-	    if(box_manager.get_state("OPTS") == TOUCH_DOWN ||
-           box_manager.get_state("OPTS") == TOUCH_PRESSING)
+	    if(box_manager.get_state("LIVES") == TOUCH_DOWN ||
+           box_manager.get_state("LIVES") == TOUCH_PRESSING ||
+           box_manager.get_state("LIVES_MINUS") == TOUCH_DOWN ||
+           box_manager.get_state("LIVES_PLUS") == TOUCH_DOWN)
 	    focus = 1;
-	    /*if(box_manager.get_state("OPTS") == TOUCH_UP)
+	    if(HIT("LIVES") || box_manager.get_state("LIVES_MINUS") == TOUCH_UP ||
+           box_manager.get_state("LIVES_PLUS") == TOUCH_UP)
 	    {
-	        current_menu = MENU_OPTS;
-            nb_focus = 4;
-            focus = 3;
-            updateName();
-	    }*/
+	        LOGI("LIVES");
+	        editing_lives = true;
+	        lives_edit = start_lives;
+	        updateName();
+	    }
 	    if(box_manager.get_state("EXIT") == TOUCH_DOWN ||
            box_manager.get_state("EXIT") == TOUCH_PRESSING)
 	    focus = 2;
-	    if(box_manager.get_state("EXIT") == TOUCH_UP)
+	    if(HIT("EXIT"))
 	    {
 	        LOGI("EXIT");
 	        current_menu = MENU_EXIT;
             nb_focus = 2;
-            focus = 0;
+            // From the remote the safe answer is pre-selected.
+            focus = (pad_hit != NULL) ? 1 : 0;
             updateName();
 	    }
 	}
@@ -156,7 +259,7 @@ int MenuMain::update()
 	    if(box_manager.get_state("RET_START_GAME1") == TOUCH_DOWN ||
            box_manager.get_state("RET_START_GAME1") == TOUCH_PRESSING)
 	    focus = 0;
-	    if(box_manager.get_state("RET_START_GAME1") == TOUCH_UP)
+	    if(HIT("RET_START_GAME1"))
 	    {
 	        LOGI("RET_START_GAME1");
 	        retour = RET_START_GAME1;
@@ -165,21 +268,35 @@ int MenuMain::update()
 	    if(box_manager.get_state("RET_START_GAME2") == TOUCH_DOWN ||
            box_manager.get_state("RET_START_GAME2") == TOUCH_PRESSING)
 	    focus = 1;
-	    if(box_manager.get_state("RET_START_GAME2") == TOUCH_UP)
+	    if(HIT("RET_START_GAME2"))
 	    {
 	        LOGI("RET_START_GAME2");
-	        retour = RET_CONTINUE;
-	        int starting_time = GetTickCount();
+	        if (in.nbPads() >= 2) {
+	            // Two game controllers: player 1 = first pad (and the
+	            // remote / keyboard), player 2 = second pad.
+	            retour = RET_START_GAME2;
+	        } else {
+	            retour = RET_CONTINUE;
 
-	        fnt_rpg.printC(backSurface, 370, 350, "If Blip'n Blop reaches 100k downloads");
-	        DDFlipV();
-	        Sleep(3200);
+	            fnt_rpg.printC(backSurface, 320, 350, "Connect two game controllers to play with two players");
+	            DDFlipV();
+	            // Keep handling events (Android lifecycle, hot-plug) while
+	            // the message is shown; a controller plugged in meanwhile
+	            // counts from the next press.
+	            Uint32 t0 = SDL_GetTicks();
+	            while (!app_killed && SDL_GetTicks() - t0 < 2500) {
+	                in.update();
+	                SDL_Delay(10);
+	            }
+	            in.refresh();
+	            in.clearPadInput();
+	        }
 	    }
 
 	    if(box_manager.get_state("RETOUR_START") == TOUCH_DOWN ||
            box_manager.get_state("RETOUR_START") == TOUCH_PRESSING)
 	    focus = 2;
-	    if(box_manager.get_state("RETOUR_START") == TOUCH_UP)
+	    if(HIT("RETOUR_START"))
 	    {
 	        LOGI("RETOUR_START");
 	        current_menu = MENU_MAIN;
@@ -198,17 +315,17 @@ int MenuMain::update()
 	    if(box_manager.get_state("RET_EXIT") == TOUCH_DOWN ||
            box_manager.get_state("RET_EXIT") == TOUCH_PRESSING)
 	    focus = 0;
-	    if(box_manager.get_state("RET_EXIT") == TOUCH_UP)
+	    if(HIT("RET_EXIT"))
 	    {
 	        LOGI("RET_EXIT");
+	        // Game::go() returns, then main() returns and the activity finishes.
 	        retour = RET_EXIT;
-	        exit(0);
 	    }
 
 	    if(box_manager.get_state("RETOUR_EXIT") == TOUCH_DOWN ||
            box_manager.get_state("RETOUR_EXIT") == TOUCH_PRESSING)
 	    focus = 1;
-	    if(box_manager.get_state("RETOUR_EXIT") == TOUCH_UP)
+	    if(HIT("RETOUR_EXIT"))
 	    {
 	        LOGI("RETOUR_EXIT");
 	        current_menu = MENU_MAIN;
@@ -217,13 +334,7 @@ int MenuMain::update()
             updateName();
 	    }
 	}
-
-
-
-
-
-
-
+#undef HIT
 
 	in.refresh();
 	return retour;
@@ -528,7 +639,16 @@ void MenuMain::draw(SDL::Surface * surf)
 
 		y += 50;
 	}
-	fnt_rpg.printC(surf, 500, 450, "Ported by Martin JULES");
+	if (current_menu == MENU_MAIN && editing_lives) {
+		if (SDL_GetNumTouchDevices() > 0 && !SDL_IsAndroidTV() && in.nbPads() == 0)
+			fnt_rpg.printC(surf, 320, 350, "Tap left or right to change, middle to set");
+		else
+			fnt_rpg.printC(surf, 320, 350, "Left or right to change, up or down by 10, OK to set");
+	}
+	static SDL::Surface * credit1 = NULL;
+	static SDL::Surface * credit2 = NULL;
+	printSmallC(surf, 530, 436, "Ported by Martin JULES", credit1);
+	printSmallC(surf, 530, 452, "Updated by Ron.R.y", credit2);
 	fnt_rpg.printC(surf, 30, 450, "2002");
 
 	}
@@ -613,9 +733,17 @@ void MenuMain::updateName()
 	switch (current_menu) {
 		case MENU_MAIN:
 			strcpy(menu_txt[0], txt_data[TXT_START_GAME]);
-			strcpy(menu_txt[1], "OPTIONS"); //txt_data[TXT_VIDEO]);
+//		strcpy( menu_txt[1], "OPTIONS"); //txt_data[TXT_VIDEO]);	not on Android
 //		strcpy( menu_txt[2], "HIGH SCORES");//txt_data[TXT_SOUND]);
 //		strcpy( menu_txt[3], "CREDITS");//txt_data[TXT_CTRL]);
+			// The menu font has no arrows: the number blinks while it is
+			// being changed.
+			if (editing_lives && (SDL_GetTicks() / 300) % 2)
+				strcpy(menu_txt[1], "LIVES    ");
+			else if (editing_lives)
+				sprintf(menu_txt[1], "LIVES  %d", lives_edit);
+			else
+				sprintf(menu_txt[1], "LIVES  %d", start_lives);
 			strcpy(menu_txt[2], txt_data[TXT_EXIT]);
 			break;
 

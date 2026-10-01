@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2014 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -20,15 +20,15 @@
 */
 #include "../../SDL_internal.h"
 
-#ifndef _SDL_ALSA_audio_h
-#define _SDL_ALSA_audio_h
+#ifndef SDL_ALSA_audio_h_
+#define SDL_ALSA_audio_h_
 
 #include <alsa/asoundlib.h>
 
 #include "../SDL_sysaudio.h"
 
 /* Hidden "this" pointer for the audio functions */
-#define _THIS   SDL_AudioDevice *this
+#define _THIS SDL_AudioDevice *this
 
 struct SDL_PrivateAudioData
 {
@@ -38,8 +38,11 @@ struct SDL_PrivateAudioData
     /* Raw mixing buffer */
     Uint8 *mixbuf;
     int mixlen;
+
+    /* swizzle function */
+    void (*swizzle_func)(_THIS, void *buffer, Uint32 bufferlen);
 };
 
-#endif /* _SDL_ALSA_audio_h */
+#endif /* SDL_ALSA_audio_h_ */
 
 /* vi: set ts=4 sw=4 expandtab: */

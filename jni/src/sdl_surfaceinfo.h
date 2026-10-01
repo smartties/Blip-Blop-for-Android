@@ -1,6 +1,6 @@
 #pragma once
 ///MODIF SDL
-#include "../SDL/include/SDL.h"
+#include "SDL.h"
 
 namespace SDL
 {

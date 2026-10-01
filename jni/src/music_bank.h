@@ -74,7 +74,7 @@ class MusicManager
     {
         int i;
 
-        LOGI("PLAY %d music bank", tab.size());
+        LOGI("PLAY %d music bank", (int)tab.size());
 
         for(i = 0; i < tab.size(); i++)
         {
@@ -86,7 +86,7 @@ class MusicManager
     {
         int i;
 
-        LOGI("STOP %d music bank", tab.size());
+        LOGI("STOP %d music bank", (int)tab.size());
 
         for(i = 0; i < tab.size(); i++)
         {

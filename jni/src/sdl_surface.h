@@ -2,7 +2,7 @@
 
 #include "graphics.h"
 ///MODIF SDL
-#include "../SDL/include/SDL.h"
+#include "SDL.h"
 
 #include "sdl_pixelformat.h"
 #include "sdl_surfaceinfo.h"
@@ -72,7 +72,7 @@ namespace SDL
 				SDL_Surface*    dst,
 				SDL_Rect*       dstrect)*/
 				int ret=SDL_BlitSurface(surf->Get(), &rect, surface, &position);
-				unsigned long* px = (unsigned long*)surf->Get()->pixels;
+				Uint32* px = (Uint32*)surf->Get()->pixels;
 				if (ret != 0)
 				{
 					debug <<"Errore SDL_BlitSurface in sdl_surface.h - "<< SDL_GetError() << "\n";

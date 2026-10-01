@@ -39,12 +39,16 @@ void HiScores::add(int scr, const char * name)
 void HiScores::crypte()
 {
 	for (int i = 0; i < HS_NB_SCORES; i++) {
-		scores[i] ^= 0x35674a1f << i;
+		// 32-bit key, as in the original Win32 build (the file format depends on it).
+		Uint32 key = (Uint32)0x35674a1f << i;
 
-		long * ptr = (long*) names[i];
+		scores[i] ^= (int)key;
 
-		for (int j = 0; j < HS_NAME_LENGTH; j += 4) {
-			*(ptr++) ^= 0x35674a1f << i;
+		for (int j = 0; j + 4 <= HS_NAME_LENGTH; j += 4) {
+			Uint32 w;
+			memcpy(&w, names[i] + j, 4);
+			w ^= key;
+			memcpy(names[i] + j, &w, 4);
 		}
 	}
 }

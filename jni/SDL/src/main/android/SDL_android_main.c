@@ -1,25 +1,7 @@
-#include "../../SDL_internal.h"
-#ifdef __ANDROID__
-#include "SDL_main.h"
-#include <jni.h>
+/*
+    SDL_android_main.c, placed in the public domain by Sam Lantinga  3/13/14
 
-extern void SDL_Android_Init(JNIEnv* env, jclass cls);
+    As of SDL 2.0.6 this file is no longer necessary.
+*/
 
-JNIEnv* senv = NULL;
-
-void Java_org_libsdl_app_SDLActivity_nativeInit(JNIEnv* env, jclass cls, jobject obj)
-{
-    SDL_Android_Init(env, cls);
-
-    SDL_SetMainReady();
-
-    senv = env;
-
-    int status;
-    char *argv[2];
-    argv[0] = SDL_strdup("SDL_app");
-    argv[1] = NULL;
-    status = SDL_main(1, argv);
-}
-
-#endif
+/* vi: set ts=4 sw=4 expandtab: */

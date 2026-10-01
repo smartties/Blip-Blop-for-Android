@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2014 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -20,7 +20,7 @@
 */
 #include "../../SDL_internal.h"
 
-#ifdef SDL_FILESYSTEM_DUMMY
+#if defined(SDL_FILESYSTEM_DUMMY) || defined(SDL_FILESYSTEM_DISABLED)
 
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 /* System dependent filesystem routines                                */
@@ -28,20 +28,18 @@
 #include "SDL_error.h"
 #include "SDL_filesystem.h"
 
-char *
-SDL_GetBasePath(void)
+char *SDL_GetBasePath(void)
 {
     SDL_Unsupported();
     return NULL;
 }
 
-char *
-SDL_GetPrefPath(const char *org, const char *app)
+char *SDL_GetPrefPath(const char *org, const char *app)
 {
     SDL_Unsupported();
     return NULL;
 }
 
-#endif /* SDL_FILESYSTEM_DUMMY */
+#endif /* SDL_FILESYSTEM_DUMMY || SDL_FILESYSTEM_DISABLED */
 
 /* vi: set ts=4 sw=4 expandtab: */

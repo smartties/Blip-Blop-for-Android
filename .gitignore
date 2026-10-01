@@ -26,3 +26,27 @@
 *.exe
 *.out
 *.app
+
+# Gradle / Android Studio
+.gradle/
+build/
+.cxx/
+.externalNativeBuild/
+local.properties
+.idea/
+*.iml
+captures/
+
+# Old ndk-build / ant outputs
+/libs/
+/obj/
+/bin/
+/gen/
+
+# Game data from the PC release (tools/fetch_game_data.sh)
+/assets/data/
+
+# Release signing (build.gradle)
+keystore.properties
+*.jks
+*.keystore

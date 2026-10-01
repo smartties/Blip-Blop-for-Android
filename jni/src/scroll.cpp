@@ -28,7 +28,7 @@
 #include "scroll.h"
 #include "ben_debug.h"
 ///MODIF SDL
-#include "../SDL/include/SDL.h"
+#include "SDL.h"
 
 int vbuffer_wide = WANTED_VBUFFER_WIDE;
 int	next_x = 0;

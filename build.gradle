@@ -1,0 +1,111 @@
+// Single-module Android project. The legacy Eclipse/ant layout (AndroidManifest.xml,
+// src/, res/, assets/, jni/ at the repository root) is kept as-is via sourceSets.
+plugins {
+    id 'com.android.application' version '8.7.3'
+}
+
+android {
+    namespace 'com.blip.blop'
+    compileSdk 35
+    ndkVersion '27.2.12479018'
+
+    defaultConfig {
+        applicationId 'com.blip.blop'
+        minSdk 21
+        targetSdk 35
+        versionCode 9
+        versionName '3.1'
+
+        ndk {
+            abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64'
+        }
+        externalNativeBuild {
+            ndkBuild {
+                arguments "-j${Runtime.runtime.availableProcessors()}"
+            }
+        }
+    }
+
+    externalNativeBuild {
+        ndkBuild {
+            path 'jni/Android.mk'
+        }
+    }
+
+    sourceSets {
+        main {
+            manifest.srcFile 'AndroidManifest.xml'
+            java.srcDirs = ['src']
+            res.srcDirs = ['res']
+            assets.srcDirs = ['assets']
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    // Release signing: a keystore described in keystore.properties (not in
+    // git) or in environment variables:
+    //   storeFile=/path/to/release.jks   (BLIPBLOP_STORE_FILE)
+    //   storePassword=...                (BLIPBLOP_STORE_PASSWORD)
+    //   keyAlias=...                     (BLIPBLOP_KEY_ALIAS)
+    //   keyPassword=...                  (BLIPBLOP_KEY_PASSWORD)
+    // Without one, the release APK is signed with the debug key so it can
+    // still be sideloaded (fine for a Shield, not for a store).
+    def signingProps = new Properties()
+    def signingFile = rootProject.file('keystore.properties')
+    if (signingFile.exists()) {
+        signingFile.withInputStream { signingProps.load(it) }
+    }
+    def signingValue = { String key, String env -> signingProps.getProperty(key) ?: System.getenv(env) }
+    def releaseStore = signingValue('storeFile', 'BLIPBLOP_STORE_FILE')
+
+    signingConfigs {
+        if (releaseStore) {
+            release {
+                storeFile file(releaseStore)
+                storePassword signingValue('storePassword', 'BLIPBLOP_STORE_PASSWORD')
+                keyAlias signingValue('keyAlias', 'BLIPBLOP_KEY_ALIAS')
+                keyPassword signingValue('keyPassword', 'BLIPBLOP_KEY_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig releaseStore ? signingConfigs.release : signingConfigs.debug
+            // proguard-rules.pro keeps org.libsdl.app, which the native code
+            // looks up by name, so R8 can be turned on safely.
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    packaging {
+        jniLibs {
+            // Store .so files uncompressed and 16 KB aligned in the APK.
+            useLegacyPackaging false
+        }
+    }
+
+    androidResources {
+        // Music is streamed straight from the APK; keep it uncompressed.
+        noCompress 'zik', 'mp3'
+    }
+
+    lint {
+        abortOnError false
+    }
+}
+
+// The game data is not in git (tools/fetch_game_data.sh). Without it the APK
+// builds but the game closes at once on the device, so refuse to build.
+tasks.named('preBuild') {
+    doFirst {
+        if (!file('assets/data/uk.dat').exists()) {
+            throw new GradleException('Game data missing in assets/data/: run tools/fetch_game_data.sh first')
+        }
+    }
+}

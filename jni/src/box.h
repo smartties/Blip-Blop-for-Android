@@ -53,10 +53,13 @@ class Box
         if(state == TOUCH_PRESSING)
         state = TOUCH_DOWN;
 
+        bool was_inside = isinside;
         isinside = false;
         isinside_w = false;
 
-        for(i = 0; i < 2; i++)
+        bool owned = false;
+
+        for(i = 0; i < MAX_FINGERS; i++)
         {
             if(collide(fin[i].x, fin[i].y))
             isinside_w = true;
@@ -80,7 +83,10 @@ class Box
             }
             if(fin[i].ptr == NULL)
             {
-                if( (fin[i].state == TOUCH_PRESSING || fin[i].state == TOUCH_UP) && collide(fin[i].x, fin[i].y) )
+                // TOUCH_UP: a tap that went down and up within one frame.
+                // Only a fresh finger counts; one that slid here from
+                // elsewhere and lifted is not a press of this box.
+                if( (fin[i].state == TOUCH_PRESSING || (fin[i].state == TOUCH_UP && fin[i].fresh)) && collide(fin[i].x, fin[i].y) )
                 {
                     isinside = true;
                     fx = (float)(fin[i].x-x)/w;
@@ -90,7 +96,17 @@ class Box
                     fin[i].ptr = this;
                 }
             }
+
+            if(fin[i].ptr != NULL && (fin[i].ptr == this || compare_ptr(fin[i].ptr)))
+            owned = true;
         }
+
+        // Held, but no finger belongs to this box any more: its finger was
+        // lifted and reused for a new press within one frame (see
+        // Touch_manager::set), so the release was never seen here. Like a
+        // normal release, it only counts as a tap if the finger was inside.
+        if(!owned && (state == TOUCH_DOWN || state == TOUCH_PRESSING))
+        state = was_inside ? TOUCH_UP : TOUCH_NOTHING;
 
     }
 
@@ -117,6 +133,7 @@ class Box_manager
     bool isinside(string name);
     bool isinside_w(string name);
     bool get_xy(string name, float &x, float &y);
+    bool contains(string name, float x, float y);
 
     private:
     vector<Box*> tab;

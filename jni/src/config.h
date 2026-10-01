@@ -41,6 +41,16 @@ extern HiScores	hi_scores;
 
 extern bool		winSet;
 
+// Lives each player starts a game with, chosen in the main menu.
+#define LIVES_MIN		3
+#define LIVES_MAX		99
+#define LIVES_DEFAULT	10
+
+extern int		start_lives;
+
+void load_lives_setting();
+void save_lives_setting();
+
 void load_BB3_config(const char * cfg_file);
 void save_BB3_config(const char * cfg_file);
 void set_default_config(bool reset_lang = false);

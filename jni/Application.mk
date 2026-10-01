@@ -1,8 +1,6 @@
+# ndk-build settings. AGP passes APP_ABI (from abiFilters) and APP_PLATFORM (from minSdk).
+APP_STL := c++_static
+APP_PLATFORM := android-21
 
-# Uncomment this if you're using STL in your project
-# See CPLUSPLUS-SUPPORT.html in the NDK documentation for more information
-# APP_STL := stlport_static 
-
-APP_STL := gnustl_static
-#APP_ABI := armeabi
-APP_ABI := armeabi armeabi-v7a x86
+# 16 KB page-size support (required by Play for targetSdk 35+ on 64-bit devices).
+APP_SUPPORT_FLEXIBLE_PAGE_SIZES := true

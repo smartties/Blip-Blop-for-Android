@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2014 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -19,7 +19,7 @@
   3. This notice may not be removed or altered from any source distribution.
 */
 
-/**
+/*
  *  \file SDL_test_random.h
  *
  *  Include file for SDL test framework.
@@ -37,8 +37,8 @@
 
 */
 
-#ifndef _SDL_test_random_h
-#define _SDL_test_random_h
+#ifndef SDL_test_random_h_
+#define SDL_test_random_h_
 
 #include "begin_code.h"
 /* Set up for C function definitions, even when using C++ */
@@ -67,7 +67,7 @@ extern "C" {
 
 /* --- Function prototypes */
 
-/**
+/*
  *  \brief Initialize random number generator with two integers.
  *
  *  Note: The random sequence of numbers returned by ...Random() is the
@@ -81,7 +81,7 @@ extern "C" {
  void SDLTest_RandomInit(SDLTest_RandomContext * rndContext, unsigned int xi,
                   unsigned int ci);
 
-/**
+/*
  *  \brief Initialize random number generator based on current system time.
  *
  *  \param rndContext     pointer to context structure
@@ -90,7 +90,7 @@ extern "C" {
  void SDLTest_RandomInitTime(SDLTest_RandomContext *rndContext);
 
 
-/**
+/*
  *  \brief Initialize random number generator based on current system time.
  *
  *  Note: ...RandomInit() or ...RandomInitTime() must have been called
@@ -98,7 +98,7 @@ extern "C" {
  *
  *  \param rndContext     pointer to context structure
  *
- *  \returns A random number (32bit unsigned integer)
+ *  \returns a random number (32bit unsigned integer)
  *
  */
  unsigned int SDLTest_Random(SDLTest_RandomContext *rndContext);
@@ -110,6 +110,6 @@ extern "C" {
 #endif
 #include "close_code.h"
 
-#endif /* _SDL_test_random_h */
+#endif /* SDL_test_random_h_ */
 
 /* vi: set ts=4 sw=4 expandtab: */

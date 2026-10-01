@@ -1,2 +1,3 @@
 Here you have to put the folder "data/" which contains all the texture/sounds/data ...
 You can find this folder on the original PC port : https://github.com/benkaraban/blip-blop
+(vc-projects/Blip_n_Blop_3/data). Run tools/fetch_game_data.sh to copy it here automatically.

@@ -75,7 +75,7 @@ bool Sound::load(const char * fic)
 
 bool Sound::loadFromMem(void * ptr, int taille)
 {
-    LOGI("LOAD %d", ptr);
+    LOGI("LOAD %p", ptr);
 	sample = FSOUND_Sample_Load(FSOUND_FREE, (char*)ptr, FSOUND_LOADMEMORY | FSOUND_LOOP_OFF, taille);
 
 	if (sample == NULL) {

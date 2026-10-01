@@ -168,7 +168,7 @@ const int y_recul_fusil [][5] = {
 Couille::Couille() : sauti(0), ctrl(NULL), id_arme(ID_M16), tire(false), etape_recul(0),
 	dir_arme(0), poid_arme(1), cadence_arme(10), ammo(0), dx_saut(0),
 	latence_arme(3), nb_etape_arme(5), invincible(0), a_mal(0),
-	nb_life(5), nb_cow_bomb(0), time_down(0), wait_cow_bomb(0),
+	nb_life(start_lives), nb_cow_bomb(0), time_down(0), wait_cow_bomb(0),
 	dx_glisse(0), latence_glisse(0), perfect(true), next_m16(0),
 	next_pm(0), next_fusil(0), next_laser(0), next_lf(0), locked_fire(false),
 	fire_lf(false), locked_dir(false), etape_cli(0), inv_cow(false), mod_life(0)
@@ -1191,7 +1191,8 @@ void Couille::updateArme()
 		if(t != NULL)
 		{
 		    t->hasangle = true;
-		    t->angle = in.angle;
+		    // Player 2 aims with its own controller (player 1: touch stick / pad).
+		    t->angle = (ctrl == &ctrlP2) ? in.padAim(1) : in.angle;
 		}
 
 		if (id_arme != ID_M16) {

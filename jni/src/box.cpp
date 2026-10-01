@@ -45,6 +45,16 @@ int  Box_manager::get_state(string name)
     return TOUCH_NOTHING;
 }
 
+bool Box_manager::contains(string name, float x, float y)
+{
+    for(int i = 0; i < tab.size(); i++)
+    {
+        if(name == tab[i]->name)
+        return tab[i]->collide(x, y);
+    }
+    return false;
+}
+
 bool Box_manager::isinside(string name)
 {
     int i;

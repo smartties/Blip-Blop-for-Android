@@ -22,6 +22,8 @@ public:
 	int		redefine;			// Numéro du schnuff à redéfinir
 	int		old_menu;
 	bool	up;
+	bool	editing_lives;		// LIVES is being changed (OK sets it)
+	int		lives_edit;			// value shown while editing
 
 	RECT	rec;
 

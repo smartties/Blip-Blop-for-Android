@@ -37,6 +37,10 @@
 #include "ben_debug.h"
 #include "input.h"
 #include "tir_bb.h"
+
+#ifndef HISCORES_FILE
+#define HISCORES_FILE	"bb.scr"	// same as blip_n_blop_3.h (not includable here)
+#endif
 #include "event_ennemi.h"
 #include "event_gen_ennemi.h"
 #include "event_lock.h"
@@ -76,6 +80,11 @@
 #include "l_timer.h"
 #include "trace.h"
 #include "precache.h"
+
+// Touch jump / fire taps held for a few updates (see updateTouch).
+static const int TAP_UPDATES = 6;
+static int jump_tap = 0, shoot_tap = 0;
+static bool jump_gap = false, shoot_gap = false;
 
 Personnage	dummyPlayer;
 int glorf;
@@ -120,6 +129,14 @@ void Game::jouePartie(int nbj, int idj)
 {
 	if (app_killed)
 		return;
+
+	// Two players: first controller (+ remote / keyboard) = player 1,
+	// second controller = player 2. Restored when leaving the game.
+	struct TwoPlayersGuard {
+		~TwoPlayersGuard() { in.setTwoPlayers(false); }
+	} two_players_guard;
+	in.setTwoPlayers(nbj == 2);
+	in.clearPadInput();
 
 	CINEPlayer	cine;
 	bool		letsgo = true;
@@ -242,10 +259,11 @@ void Game::jouePartie(int nbj, int idj)
 		    in.update();
 		    if(in.so_pressing())
 		    pre = true;
-		    if(in.so_up() && pre)
+		    if((in.so_up() && pre) || app_killed)
 		    break;
 
 		    in.refresh();
+		    SDL_Delay(10);
 		}
 
 		mbk.stop();
@@ -490,7 +508,7 @@ bool Game::joueNiveau(const char * nom_niveau, int type)
 
 		pbk_briefing[0]->PasteTo(backSurface, 0, 0);
 		LOGI("PRESS a key");
-		fnt_cool.printC(backSurface, 320,430, "TOUCH TO BEGIN");
+		fnt_cool.printC(backSurface, 320,430, (SDL_GetNumTouchDevices() > 0 && !SDL_IsAndroidTV() && in.nbPads() == 0) ? "TOUCH TO BEGIN" : "PRESS OK TO BEGIN");
 		DDFlip();
 
 		mbk_inter.play(2);
@@ -500,13 +518,20 @@ bool Game::joueNiveau(const char * nom_niveau, int type)
 		while(1)
 		{
 		    in.update();
-		    if(in.so_up())
+		    if(in.so_up() || app_killed)
 		    break;
 		    in.refresh();
+		    SDL_Delay(10);
 		}
 		pbk_briefing.close();
 		briefing = false;
 	}
+
+	// Drop the START / A / B that ended the briefing, a cutscene or the
+	// previous level, so the level does not open paused, jumping or bombing.
+	in.clearPadInput(true);
+	jump_tap = shoot_tap = 0;
+	jump_gap = shoot_gap = false;
 
 	// Update quelques trucs
 	//
@@ -1255,6 +1280,11 @@ void Game::updateAll()
 
 void Game::drawTools()
 {
+    // On-screen touch controls (assets/ui, see tools/make_touch_ui.py): only
+    // on touch devices, and hidden on Android TV or when a controller is used.
+    if(SDL_GetNumTouchDevices() <= 0 || SDL_IsAndroidTV() || in.nbPads() > 0)
+    return;
+
     if(in.padded )
     {
     int xx = in.pad_x-85;
@@ -2799,19 +2829,22 @@ void Game::updateTouch()
 
     if(in.padded == false)
     {
-        int indp = in.search_pressing();
+        // The first new finger on the left half. Not just the first new
+        // finger: with a button and the stick touched in the same frame,
+        // the stick finger would never be PRESSING again.
+        int indp = -1;
+        for(int f = 0; f < MAX_FINGERS && indp == -1; f++)
+        if(in.finger[f].state == TOUCH_PRESSING && in.finger[f].x <= 0.5)
+        indp = f;
 
         if(indp != -1)
         {
-            if(in.finger[indp].x <= 0.5)
-            {
-                in.padded = true;
-                in.pad_x = in.finger[indp].x;
-                in.pad_x *= 640;
-                in.pad_y = in.finger[indp].y;
-                in.pad_y *= 480;
-                in.finger[indp].ptr = &in.padded;
-            }
+            in.padded = true;
+            in.pad_x = in.finger[indp].x;
+            in.pad_x *= 640;
+            in.pad_y = in.finger[indp].y;
+            in.pad_y *= 480;
+            in.finger[indp].ptr = &in.padded;
         }
     }
     else
@@ -2820,7 +2853,8 @@ void Game::updateTouch()
 
         if(indp == -1 || (indp != -1 &&  (in.finger[indp].state == TOUCH_UP || in.finger[indp].state == TOUCH_NOTHING)) )
         {
-            in.finger[indp].ptr = NULL;
+            if(indp != -1)
+                in.finger[indp].ptr = NULL;
             in.padded = false;
         }
         else
@@ -2876,6 +2910,24 @@ void Game::updateTouch()
         }
     }
 
+    // Gamepad / TV remote / keyboard for player 1 (see Input::update).
+    if(in.padHeld(0, ACT_LEFT))  in.gauche = true;
+    if(in.padHeld(0, ACT_RIGHT)) in.droit = true;
+    if(in.padHeld(0, ACT_UP))    in.haut = true;
+    if(in.padHeld(0, ACT_DOWN))  in.bas = true;
+    if(in.padHeld(0, ACT_FIRE))  in.tirer = true;
+    if(in.padHeld(0, ACT_JUMP))  in.sauter = true;
+    if(!in.padded && in.padHasDir(0))
+    in.angle = in.padAim(0);    // 8-way aiming, as with the touch stick
+
+    if(in.takeSuper(0) && player1 != NULL && player1->nb_cow_bomb >= 1)
+    in.ulti = true;
+    // Player 2's cow bomb request is taken here on every update too (read
+    // by ControlP2::super), so a press while player 2 is dead or coming back
+    // does not linger and fire a bomb later.
+    if(in.takeSuper(1) && player2 != NULL && player2->nb_cow_bomb >= 1)
+    in.ulti2 = true;
+
     if(in.droit)
     last_dir = 1;
     if(in.gauche)
@@ -2895,6 +2947,48 @@ void Game::updateTouch()
     {
         in.ulti = true;
     }
+
+    // A quick tap on jump / fire can start and end between two checks of
+    // the buttons above: hold it for a few updates so it still counts.
+    // A new tap while one is held first releases the button for one
+    // update, so two quick taps stay two presses (double jump, semi-auto
+    // weapons) instead of merging into one long one.
+    float tx, ty;
+    while(in.take_tap(tx, ty))
+    {
+        if(box_manager.contains("jump", tx, ty))
+        {
+            if(jump_tap > 0)
+            jump_gap = true;
+            jump_tap = TAP_UPDATES;
+        }
+        if(box_manager.contains("shoot", tx, ty))
+        {
+            if(shoot_tap > 0)
+            shoot_gap = true;
+            shoot_tap = TAP_UPDATES;
+        }
+    }
+    if(jump_gap)
+    {
+        in.sauter = false;
+        jump_gap = false;
+    }
+    else if(jump_tap > 0)
+    {
+        in.sauter = true;
+        jump_tap--;
+    }
+    if(shoot_gap)
+    {
+        in.tirer = false;
+        shoot_gap = false;
+    }
+    else if(shoot_tap > 0)
+    {
+        in.tirer = true;
+        shoot_tap--;
+    }
 }
 
 void Game::updateMenu()
@@ -2903,7 +2997,9 @@ void Game::updateMenu()
 	//
 	///MODIF touch menu
 	//if (in.scanKey(DIK_ESCAPE)) {
-	if(box_manager.get_state("pause") == TOUCH_UP || go_to_menu) {
+	// Touch "pause" box, app sent to background, START / BACK on a
+	// gamepad or TV remote, or a controller that went away.
+	if(box_manager.get_state("pause") == TOUCH_UP || go_to_menu || in.takePause() || in.takeDisconnect()) {
 		MenuGame	menu;
 		int			r;
 		go_to_menu = false;
@@ -2935,6 +3031,9 @@ void Game::updateMenu()
 			skipped = true;
 
 		menu.stop();
+
+		// Do not let the button that closed the menu jump / fire / bomb.
+		in.waitClean();
 
 		drawAll(false);
 		DDFlipV();
@@ -3366,9 +3465,10 @@ void Game::showPE(bool bonus, bool fuckOff)
 		while(1)
 		{
 		    in.update();
-		    if(in.so_up())
+		    if(in.so_up() || app_killed)
 		    break;
 		    in.refresh();
+		    SDL_Delay(10);
 		}
 	}
 
@@ -3575,51 +3675,41 @@ void Game::updateDeformation()
 
 void Game::drawDeformation()
 {
-	DDBLTFX         ddfx;
-	RECT	r;
-	int		pas = 20;
-	int		phi = phi_deform;
-	int		dphi = 10;
-	int		x;
-	int		xt;
+	// Underwater ripple: each band of 2 lines is shifted sideways along a
+	// sine wave and the uncovered pixels are filled with black. The shift is
+	// done in place with memmove; a blit of the surface onto itself (as the
+	// original DirectDraw code did) copies left to right, so the lines
+	// shifted to the right turned into smeared streaks.
+	SDL_Surface *	s = backSurface->Get();
+	const int		pas = 2;
+	const int		dphi = 1;
+	int				phi = phi_deform;
+	int				w = s->w;
 
-	ZeroMemory(&ddfx, sizeof(ddfx));
-	ddfx.dwSize = sizeof(ddfx);
-	ddfx.dwFillColor = 0; // Noir
+	if (SDL_MUSTLOCK(s))
+		SDL_LockSurface(s);
 
-	pas = 2;
-	dphi = 1;
-
-	for (int y = 0; y < 480; y += pas) {
+	for (int y = 0; y < s->h; y += pas) {
 		phi += dphi;
 		phi %= 360;
 
-		r.top	= y;
-		r.bottom = y + pas;
+		int x = (5 * bSin[phi]) >> COSINUS;
 
-		x = xt = (5 * bSin[phi]) >> COSINUS;
+		for (int line = y; line < y + pas && line < s->h; line++) {
+			Uint32 *	p = (Uint32 *) ((Uint8 *) s->pixels + line * s->pitch);
 
-		if (x < 0) {
-			r.left	= -x;
-			r.right = 640;
-			x = 0;
-		} else {
-			r.left	= 0;
-			r.right = 640 - x;
+			if (x > 0) {
+				memmove(p + x, p, (w - x) * sizeof(Uint32));
+				memset(p, 0, x * sizeof(Uint32));
+			} else if (x < 0) {
+				memmove(p, p - x, (w + x) * sizeof(Uint32));
+				memset(p + w + x, 0, -x * sizeof(Uint32));
+			}
 		}
-
-		backSurface->BltFast(x, y, backSurface, &r, DDBLTFAST_WAIT | DDBLTFAST_NOCOLORKEY);
-
-		if (xt < 0) {
-			r.left	= 640 + xt;
-			r.right = 640;
-		} else {
-			r.left	= 0;
-			r.right = xt;
-		}
-
-		backSurface->Blt(&r, NULL, NULL, DDBLT_WAIT | DDBLT_COLORFILL, &ddfx);
 	}
+
+	if (SDL_MUSTLOCK(s))
+		SDL_UnlockSurface(s);
 }
 
 //-----------------------------------------------------------------------------
@@ -3968,6 +4058,7 @@ void Game::getName(Joueur * joueur, int ijoueur)
 	}
 
 	hi_scores.add(joueur->getScore(), name);
+	hi_scores.save(HISCORES_FILE);	// internal storage (log.cpp create_pathSDL)
 }
 
 //-----------------------------------------------------------------------------
@@ -4002,6 +4093,9 @@ bool Game::showGameOver()
 		DDFlipV();//primSurface->Flip( NULL, 0);
 		in.refresh();
 	}
+	// The press that closed this screen must not also skip the high scores.
+	in.refresh();
+	in.waitClean();
 	/*
 		if ( !app_killed)
 		{
@@ -4025,6 +4119,7 @@ bool Game::showGameOver()
 		}
 	*/
 	mbk_inter.stop();
+	return true;
 }
 
 
@@ -4109,9 +4204,14 @@ void Game::go()
 	int			r;
 	static int	zob = 0;
 
-	box_manager.add(0.3442, 0.4028,   0.65,   0.46, "START", 0);
-	box_manager.add(0.3957, 0.5017, 0.5971, 0.5614, "OPTS", 0);
-	box_manager.add(0.4371,   0.61, 0.5514, 0.6642, "EXIT", 0);
+	// Main menu: START GAME / LIVES / EXIT (OPTIONS is not on Android),
+	// drawn at y = 195, 245 and 295. While LIVES is being changed, the left
+	// and right parts of its line lower / raise it.
+	box_manager.add(0.3442, 0.4015,   0.65, 0.4629, "START", 0);
+	box_manager.add(  0.28, 0.5057,   0.42, 0.5671, "LIVES_MINUS", 0);
+	box_manager.add(  0.42, 0.5057,   0.58, 0.5671, "LIVES", 0);
+	box_manager.add(  0.58, 0.5057,   0.72, 0.5671, "LIVES_PLUS", 0);
+	box_manager.add(0.4371, 0.6098, 0.5514, 0.6713, "EXIT", 0);
 
 	box_manager.add(0.2185, 0.4028,   0.78, 0.4614, "RET_START_GAME1", 9);
 	box_manager.add(0.2071, 0.5085, 0.7914, 0.5642, "RET_START_GAME2", 9);
@@ -4120,9 +4220,9 @@ void Game::go()
 	box_manager.add(0.4357, 0.4328, 0.5528, 0.4942, "RET_EXIT",    8);
 	box_manager.add(0.4057,   0.54, 0.5842, 0.5971, "RETOUR_EXIT", 8);
 
-	box_manager.add(cv(231), cv(261), cv(467), cv(302), "PAUSE_RESUME", 10);
-	box_manager.add(cv(278), cv(335), cv(418), cv(376), "PAUSE_OPTION", 10);
-	box_manager.add(cv(253), cv(406), cv(443), cv(446), "PAUSE_EXIT",   10);
+	// Pause menu: RESUME / EXIT GAME (no OPTIONS), drawn at y = 200 and 250.
+	box_manager.add(cv(231), cv(290), cv(467), cv(331), "PAUSE_RESUME", 10);
+	box_manager.add(cv(253), cv(363), cv(443), cv(404), "PAUSE_EXIT",   10);
 
 
     box_manager.add(cv(308), cv(639), cv(388), cv(680), "play",     98);
@@ -4133,8 +4233,8 @@ void Game::go()
 	///min    (0.0328, 0.67)
 	///max    (0.2357, 0.9828)
 	//box_manager.add(cv(3), cv(407), cv(187), cv(695), "pad",    99);
-	p_joystick.LoadPNG("data/pad.png");
-	stick.LoadPNG("data/stick.png");
+	p_joystick.LoadPNG("ui/pad.png");
+	stick.LoadPNG("ui/stick.png");
 	p_pad0.LoadPNG("data/pad0.png");
 	p_pad1.LoadPNG("data/pad1.png");
 	p_pad2.LoadPNG("data/pad2.png");
@@ -4146,19 +4246,19 @@ void Game::go()
 
 
 	box_manager.add(0.92, 0, 1, 0.1085, "pause",    99);
-	p_pause.LoadPNG("data/pause.png");
+	p_pause.LoadPNG("ui/pause.png");
 
 	box_manager.add(0.8957, 0.8571, 0.9885, 0.9885, "ulti",    99);
-	p_ulti.LoadPNG("data/ulti.png");
-	p_ulti_p.LoadPNG("data/ulti_p.png");
+	p_ulti.LoadPNG("ui/ulti.png");
+	p_ulti_p.LoadPNG("ui/ulti_p.png");
 
 	box_manager.add(0.8742, 0.68, 0.9714, 0.8128, "jump",    99);
-    p_jump.LoadPNG("data/jump.png");
-    p_jump_p.LoadPNG("data/jump_p.png");
+    p_jump.LoadPNG("ui/jump.png");
+    p_jump_p.LoadPNG("ui/jump_p.png");
 
     box_manager.add(0.7714, 0.8442, 0.8657, 0.9785, "shoot",    99);
-    p_shoot.LoadPNG("data/shoot.png");
-    p_shoot_p.LoadPNG("data/shoot_p.png");
+    p_shoot.LoadPNG("ui/shoot.png");
+    p_shoot_p.LoadPNG("ui/shoot_p.png");
 
 
 
@@ -4264,6 +4364,11 @@ void Game::go()
 			    jouePartie(2, selectPlayer());
 			}
 
+			// The press that closed the high scores (or the game) must not
+			// also activate START GAME in the menu.
+			in.refresh();
+			in.waitClean();
+
 			menu.stop();
 			menu.start();
 			mbk_interl.play(0);
@@ -4365,6 +4470,7 @@ bool Game::showBriefing(char * fn)
 	LOGI("LOADING");
 	fnt_rpg.printC(backSurface, 320, 460, "Loading...");
 	DDFlip();
+	return true;
 }
 
 //-----------------------------------------------------------------------------
@@ -4434,7 +4540,7 @@ int Game::selectPlayer()
 			if (x_perso < 240) {
 				x_perso += 20;
 			//} else if (in.scanKey(DIK_RIGHT) || in.scanAlias(ALIAS_P1_RIGHT)) {
-			} else if (box_manager.get_state("goblop") == TOUCH_UP) {
+			} else if (box_manager.get_state("goblop") == TOUCH_UP || in.nav[NAV_RIGHT] || in.nav[NAV_LEFT]) {
 				etape = FINI_BLIP;
 			} else if (phase) {
 				pbk_inter[4]->BlitTo(backSurface, 620, 257);
@@ -4447,7 +4553,7 @@ int Game::selectPlayer()
 			pbk_inter[8]->BlitTo(backSurface, x_nom, y_nom);
 
 			//if (x_perso >= 240 && (in.scanKey(DIK_RETURN) || in.scanAlias(ALIAS_P1_FIRE))) {
-			if(x_perso >= 240 && box_manager.get_state("play") == TOUCH_UP) {
+			if(x_perso >= 240 && (box_manager.get_state("play") == TOUCH_UP || in.nav[NAV_OK])) {
 				drawLoading();
 				DDFlipV();//primSurface->Flip( 0, NULL);
 				in.refresh();
@@ -4474,7 +4580,7 @@ int Game::selectPlayer()
 			if (x_perso > 310) {
 				x_perso -= 20;
 			//} else if (in.scanKey(DIK_LEFT) || in.scanAlias(ALIAS_P1_LEFT)) {
-			} else if (box_manager.get_state("goblip") == TOUCH_UP) {
+			} else if (box_manager.get_state("goblip") == TOUCH_UP || in.nav[NAV_LEFT] || in.nav[NAV_RIGHT]) {
 				etape = FINI_BLOP;
 			} else if (phase) {
 				pbk_inter[5]->BlitTo(backSurface, 20, 254);
@@ -4488,7 +4594,7 @@ int Game::selectPlayer()
 
 			///MODIF touch
 			//if (x_perso <= 310 && (in.scanKey(DIK_RETURN) || in.scanAlias(ALIAS_P1_FIRE))) {
-			if( x_perso <= 310 && box_manager.get_state("play") == TOUCH_UP) {
+			if( x_perso <= 310 && (box_manager.get_state("play") == TOUCH_UP || in.nav[NAV_OK])) {
 				drawLoading();
 				DDFlipV();//primSurface->Flip( 0, NULL);
 

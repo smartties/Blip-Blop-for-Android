@@ -1,9 +1,115 @@
 #include "graphics.h"
+#include "log.h"
 
 extern SDL::Surface	*	backSurface;
 
 #define WIDTH  640
 #define HEIGHT 480
+
+//-----------------------------------------------------------------------------
+// Presentation: the game draws a 640x480 software surface. It is uploaded to
+// one streaming texture, scaled up with nearest filtering to the next integer
+// multiple, then scaled down with linear filtering into a letterboxed 4:3
+// rectangle ("sharp bilinear"). Pixels stay crisp at any resolution (720p,
+// 1080p, 4K TV, 20:9 phones) without the uneven pixels of plain nearest.
+//-----------------------------------------------------------------------------
+
+static SDL_Texture *	frame_tex = NULL;	// 640x480, updated every frame
+static SDL_Texture *	up_tex = NULL;		// (640*k)x(480*k) render target
+static int				up_k = 0;
+static SDL_Rect			dst_rect = { 0, 0, WIDTH, HEIGHT };
+static int				out_w = WIDTH, out_h = HEIGHT;
+
+void Graphics_RenderReset()
+{
+	if (frame_tex) SDL_DestroyTexture(frame_tex);
+	if (up_tex) SDL_DestroyTexture(up_tex);
+	frame_tex = NULL;
+	up_tex = NULL;
+	up_k = 0;
+}
+
+// Touch coordinates are normalised to the window; map them to the picture.
+void Graphics_MapTouch(float &x, float &y)
+{
+	if (dst_rect.w <= 0 || dst_rect.h <= 0)
+		return;
+	x = (x * out_w - dst_rect.x) / (float)dst_rect.w;
+	y = (y * out_h - dst_rect.y) / (float)dst_rect.h;
+	if (x < 0) x = 0;
+	if (x > 1) x = 1;
+	if (y < 0) y = 0;
+	if (y > 1) y = 1;
+}
+
+static void present_frame(SDL_Renderer *renderer, SDL_Surface *surf)
+{
+	if (renderer == NULL || surf == NULL)
+		return;
+
+	if (frame_tex == NULL) {
+		frame_tex = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ABGR8888,
+		                              SDL_TEXTUREACCESS_STREAMING, surf->w, surf->h);
+		if (frame_tex == NULL) {
+			LOGI("SDL_CreateTexture failed: %s", SDL_GetError());
+			return;
+		}
+		SDL_SetTextureScaleMode(frame_tex, SDL_ScaleModeNearest);
+	}
+
+	SDL_UpdateTexture(frame_tex, NULL, surf->pixels, surf->pitch);
+
+	// Letterboxed 4:3 destination rectangle
+	if (SDL_GetRendererOutputSize(renderer, &out_w, &out_h) != 0 || out_w <= 0 || out_h <= 0) {
+		out_w = surf->w;
+		out_h = surf->h;
+	}
+	float scale = SDL_min(out_w / (float)surf->w, out_h / (float)surf->h);
+	dst_rect.w = (int)(surf->w * scale + 0.5f);
+	dst_rect.h = (int)(surf->h * scale + 0.5f);
+	dst_rect.x = (out_w - dst_rect.w) / 2;
+	dst_rect.y = (out_h - dst_rect.h) / 2;
+
+	SDL_SetRenderTarget(renderer, NULL);
+	SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+	SDL_RenderClear(renderer);
+
+	int k = (int)SDL_ceilf(scale - 0.01f);
+	bool integer = SDL_fabsf(scale - SDL_roundf(scale)) < 0.01f;
+
+	if (k > 1 && !integer) {
+		SDL_RendererInfo info;
+		if (SDL_GetRendererInfo(renderer, &info) == 0 && info.max_texture_width > 0) {
+			while (k > 1 && (surf->w * k > info.max_texture_width ||
+			                 surf->h * k > info.max_texture_height))
+				k--;
+		}
+	}
+
+	if (k > 1 && !integer) {
+		if (up_tex == NULL || up_k != k) {
+			if (up_tex) SDL_DestroyTexture(up_tex);
+			up_tex = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ABGR8888,
+			                           SDL_TEXTUREACCESS_TARGET, surf->w * k, surf->h * k);
+			up_k = k;
+			if (up_tex)
+				SDL_SetTextureScaleMode(up_tex, SDL_ScaleModeLinear);
+			else
+				LOGI("Upscale texture failed: %s", SDL_GetError());
+		}
+	}
+
+	if (k > 1 && !integer && up_tex != NULL &&
+	    SDL_SetRenderTarget(renderer, up_tex) == 0) {
+		SDL_RenderCopy(renderer, frame_tex, NULL, NULL);
+		SDL_SetRenderTarget(renderer, NULL);
+		SDL_RenderCopy(renderer, up_tex, NULL, &dst_rect);
+	} else {
+		SDL_RenderCopy(renderer, frame_tex, NULL, &dst_rect);
+	}
+
+	SDL_RenderPresent(renderer);
+}
 
 Graphics::Graphics()
 {
@@ -44,12 +150,16 @@ bool Graphics::SetGfxMode(int x, int y, int d)
 		window = 0;
 	}
 
-	window = SDL_CreateWindow("Blip&Blop", x, y, x, y, SDL_WINDOW_SHOWN);
+	// Full screen: on Android this also hides the status and navigation bars
+	// (immersive mode). The picture is letterboxed in Flip().
+	window = SDL_CreateWindow("Blip&Blop", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+	                          x, y, SDL_WINDOW_SHOWN | SDL_WINDOW_FULLSCREEN_DESKTOP);
 	if (window == 0){
 		std::cout << SDL_GetError() << std::endl;
 		return false;
 	}
 
+	Graphics_RenderReset();
 	renderer = 0;
 	renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
 	if (renderer == 0){
@@ -64,6 +174,7 @@ bool Graphics::SetGfxMode(int x, int y, int d)
 
 void Graphics::Close()
 {
+	Graphics_RenderReset();
 	if(renderer!=0)
 	{
 		SDL_DestroyRenderer(renderer);
@@ -220,41 +331,7 @@ HRESULT					Graphics::SetColorKey(SDL::Surface *surf, COLORREF rgb)
 
 void					Graphics::Flip()
 {
-    ///TODO creer une texture static, et la modifier
-    /**
-    CHUNK
-    SDL_CreateTextureFromSurface
-
-    SDL_UpdateTexture
-
-    sdlTexture = SDL_CreateTexture(sdlRenderer,
-                               SDL_PIXELFORMAT_ARGB8888,
-                               SDL_TEXTUREACCESS_STATIC//SDL_TEXTUREACCESS_STREAMING,
-                               myWidth, myHeight);
-
-    **/
-
-    static int ttt = GetTickCount();
-    static int ccc = 0;
-    ccc++;
-    if(GetTickCount() - ttt > 1000)
-    {
-        LOGI("FPS : %d", ccc);
-        ccc = 0;
-        ttt = GetTickCount();
-    }
-
-
-	SDL_Texture *tex = 0;
-	tex = SDL_CreateTextureFromSurface(renderer, backSurface->Get());
-	SDL_RenderClear(renderer);
-	SDL_RenderCopy(renderer, tex, NULL, NULL);
-	SDL_RenderPresent(renderer);
-
-	SDL_DestroyTexture(tex);
-	//SDL_Delay(1);
-
-	//SDL_SaveBMP(backSurface->Get(), "test/draw.bmp");
+	present_frame(renderer, backSurface->Get());
 }
 
 void					Graphics::FlipV()
